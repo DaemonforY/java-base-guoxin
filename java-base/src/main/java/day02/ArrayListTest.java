@@ -14,7 +14,7 @@ import java.util.Iterator;
 public class ArrayListTest {
     public static void main(String[] args) {
         System.out.println("======访问元素=====");
-        ArrayList<String> sites = new ArrayList<String>();
+        ArrayList<String> sites = new ArrayList<>();
         sites.add("Google");
         sites.add("Runoob");
         sites.add("Taobao");
@@ -53,6 +53,10 @@ public class ArrayListTest {
         }
 
         Iterator<String> iterator = sites.iterator();
+
+        while (iterator.hasNext()) {
+            System.out.println(iterator.next());
+        }
 
     }
 }

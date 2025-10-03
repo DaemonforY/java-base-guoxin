@@ -1,0 +1,626 @@
+
+
+## 为什么要多线程
+```java
+public class ImageProcessingExample {
+
+    public void processImagesSingleThread() {
+        ImageProcessor processor = new ImageProcessor();
+        long startTime = System.currentTimeMillis();
+
+        // 单线程逐个处理图像
+        for (int i = 0; i < 20; i++) {
+            processor.processImage("Image" + i);
+        }
+
+        long endTime = System.currentTimeMillis();
+        System.out.println("单线程处理时间: " + (endTime - startTime) + " 毫秒");
+    }
+
+    public void processImagesMultiThread() {
+        ImageProcessor processor = new ImageProcessor();
+        long startTime = System.currentTimeMillis();
+
+        // 使用线程池进行多线程处理
+        ExecutorService executorService = Executors.newFixedThreadPool(5);
+        for (int i = 0; i < 20; i++) {
+            String imageName = "Image" + i;
+            executorService.execute(() -> processor.processImage(imageName));
+        }
+
+        // 关闭线程池并等待任务完成
+        executorService.shutdown();
+        while (!executorService.isTerminated()) {
+            // 等待所有任务完成
+        }
+
+        long endTime = System.currentTimeMillis();
+        System.out.println("多线程处理时间: " + (endTime - startTime) + " 毫秒");
+    }
+
+    public static void main(String[] args) {
+        ImageProcessingExample example = new ImageProcessingExample();
+
+        System.out.println("开始单线程处理图像:");
+        example.processImagesSingleThread();
+
+        System.out.println("\n开始多线程处理图像:");
+        example.processImagesMultiThread();
+    }
+
+    static class ImageProcessor {
+        // 处理图像方法
+        public void processImage(String imageName) {
+            System.out.println(Thread.currentThread().getName() + " 正在处理: " + imageName);
+            try {
+                // 模拟图像处理时间
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // 图像缩放和滤波处理，例如调用经典库
+            // 具体处理逻辑省略
+            System.out.println(Thread.currentThread().getName() + " 处理完成: " + imageName);
+        }
+    }
+}
+```
+
+## 并发版hello world
+```java
+public class HelloWorld {
+    public static void main(String[] args) throws InterruptedException {
+        Thread thread = new Thread() {
+            public void run() {
+                System.out.println("Hello World  - my thread");
+            }
+        };
+        thread.start();
+        Thread.yield();  //  释放当前线程的执行权，让其他线程有机会执行。
+        // 如果不调用Thread.yield()，由于创建新线程要花一些时间，那么main线程几乎肯定会先执行print
+        // 当然也不一定，并发编程有一个规律：如果某件事可能会发生，那么不论多么艰难，肯定会发生，而且可能发生在最不利的时刻
+        System.out.println("Hello World  - main thread");
+        thread.join();
+
+        //试着将Thread.yield()注释掉，看看会发生什么。如果换成Thread.sleep(1)呢
+    }
+}
+```
+上述的结果并不稳定
+
+## 第一把锁
+```java
+public class Counting {
+    public static void main(String[] args) {
+        class Counter {
+            private int count = 0;
+            public void increment() {
+                count++;
+            }
+            public int getCount() {
+                return count;
+            }
+        }
+        final Counter counter = new Counter();
+        class CountingThread extends Thread {
+            @Override
+            public void run() {
+                for (int i = 0; i < 10000; i++) {
+                    counter.increment();
+                }
+            }
+        }
+        CountingThread t1 = new CountingThread();
+        t1.start();
+        CountingThread t2 = new CountingThread();
+        t2.start();
+        try {
+            t1.join();
+            t2.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println(counter.getCount());
+    }
+}
+```
+结果总是介于10000-20000，
+解决：
+```java
+        class Counter {
+            private int count = 0;
+            public synchronized void increment() {
+                count++;
+            }
+            public int getCount() {
+                return count;
+            }
+        }
+```
+
+## 死锁问题
+为了演示死锁，我们可以设计一个程序，让两个线程试图同时获取两个共享资源锁（类似于叉子），并且它们在获取这些锁时出现了死锁情况。以下是一个导致死锁的代码示例：
+
+```java
+public class DeadlockExample {
+    private static final Object lock1 = new Object();
+    private static final Object lock2 = new Object();
+
+    private static class ThreadA extends Thread {
+        @Override
+        public void run() {
+            synchronized (lock1) {
+                System.out.println("Thread A: Holding lock 1...");
+                try { Thread.sleep(50); } catch (InterruptedException e) {}
+
+                System.out.println("Thread A: Waiting for lock 2...");
+                synchronized (lock2) {
+                    System.out.println("Thread A: Holding lock 1 & 2...");
+                }
+            }
+        }
+    }
+
+    private static class ThreadB extends Thread {
+        @Override
+        public void run() {
+            synchronized (lock2) {
+                System.out.println("Thread B: Holding lock 2...");
+                try { Thread.sleep(50); } catch (InterruptedException e) {}
+
+                System.out.println("Thread B: Waiting for lock 1...");
+                synchronized (lock1) {
+                    System.out.println("Thread B: Holding lock 2 & 1...");
+                }
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        Thread threadA = new ThreadA();
+        Thread threadB = new ThreadB();
+        
+        threadA.start();
+        threadB.start();
+    }
+}
+```
+
+### 说明
+
+- **死锁发生原因**：
+    - `ThreadA` 持有 `lock1` 并等待 `lock2`。
+    - `ThreadB` 持有 `lock2` 并等待 `lock1`。
+    - 两个线程互相等待对方释放锁，从而陷入死锁。
+
+### 如何避免死锁
+
+有几种策略可以避免死锁：
+
+1. **锁排序**：确保所有线程以相同顺序请求锁。例如，先锁 `lock1`，再锁 `lock2`，可以避免死锁情况。
+
+2. **超时锁请求**：使用机制如 `tryLock()` 允许锁请求超时，如果无法获取锁，可以在一段时间后重试。
+
+3. **锁管理架构**：设计更复杂的锁管理策略，避免长期锁定资源。
+
+
+要解决之前代码中的死锁问题，可以通过以下几种策略：
+
+### 1. 确定锁的顺序
+
+一种简单的方法是确保所有线程以相同顺序获取锁。即不管是什么情况，线程都应该先尝试获取 `lock1`，然后才获取 `lock2`。以下是代码修正：
+
+```java
+public class DeadlockSolution {
+    private static final Object lock1 = new Object();
+    private static final Object lock2 = new Object();
+
+    private static class ThreadA extends Thread {
+        @Override
+        public void run() {
+            synchronized (lock1) {
+                System.out.println("Thread A: Holding lock 1...");
+                try { Thread.sleep(50); } catch (InterruptedException e) {}
+
+                synchronized (lock2) {
+                    System.out.println("Thread A: Holding lock 1 & 2...");
+                }
+            }
+        }
+    }
+
+    private static class ThreadB extends Thread {
+        @Override
+        public void run() {
+            synchronized (lock1) {
+                System.out.println("Thread B: Holding lock 1...");
+                try { Thread.sleep(50); } catch (InterruptedException e) {}
+
+                synchronized (lock2) {
+                    System.out.println("Thread B: Holding lock 1 & 2...");
+                }
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        Thread threadA = new ThreadA();
+        Thread threadB = new ThreadB();
+        
+        threadA.start();
+        threadB.start();
+    }
+}
+```
+
+### 2. 使用 `tryLock` 方法（高级锁机制）
+
+使用 `ReentrantLock` 的 `tryLock()` 方法，可以尝试以一定的时间请求锁，并在无法获取锁时放弃当前锁，避免死锁。这种方法需要改用 `ReentrantLock` 而不是 `synchronized`：
+
+```java
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class DeadlockTryLockSolution {
+    private static final Lock lock1 = new ReentrantLock();
+    private static final Lock lock2 = new ReentrantLock();
+
+    private static class TryLockThreadA extends Thread {
+        @Override
+        public void run() {
+            try {
+                while (true) {
+                    if (lock1.tryLock()) {
+                        System.out.println("Thread A: Holding lock 1...");
+                        Thread.sleep(50);
+                        if (lock2.tryLock()) {
+                            try {
+                                System.out.println("Thread A: Holding lock 1 & 2...");
+                                break; // 成功获得锁，完成工作
+                            } finally {
+                                lock2.unlock();
+                            }
+                        }
+                        lock1.unlock();  // 释放 lock1，尝试重新获取
+                    }
+                    Thread.sleep(50);  // 等待一段时间后重试
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private static class TryLockThreadB extends Thread {
+        @Override
+        public void run() {
+            try {
+                while (true) {
+                    if (lock1.tryLock()) {
+                        System.out.println("Thread B: Holding lock 1...");
+                        Thread.sleep(50);
+                        if (lock2.tryLock()) {
+                            try {
+                                System.out.println("Thread B: Holding lock 1 & 2...");
+                                break; // 成功获得锁，完成工作
+                            } finally {
+                                lock2.unlock();
+                            }
+                        }
+                        lock1.unlock();  // 释放 lock1，尝试重新获取
+                    }
+                    Thread.sleep(50);  // 等待一段时间后重试
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        Thread threadA = new TryLockThreadA();
+        Thread threadB = new TryLockThreadB();
+        
+        threadA.start();
+        threadB.start();
+    }
+}
+```
+
+### 3. 使用全局锁排序或者锁规则
+
+另一种解决死锁的思路是使用锁排序或者锁规则来维护哪些锁可以一起被持有，管理锁的获取顺序以避免冲突。
+
+### 说明
+
+- 确定锁的顺序是最直接的方法，可确保线程以一致的顺序持有锁，防止交叉等待。
+- `tryLock()` 允许线程在获取锁失败时采取行动，而不会长时间阻塞，这比简单的顺序控制更灵活。
+- 实际开发中，可以根据具体需求和情况选择一种或几种策略综合应用。
+
+
+
+
+---
+
+### 教学大纲
+
+**1. 线程的基本概念**
+- 进程与线程的区别
+- 线程的生命周期：新建、就绪、运行、阻塞、终止
+
+**2. 创建与启动线程**
+- 实现 `Runnable` 接口
+- 继承 `Thread` 类
+
+**案例练习**：  
+创建并启动简单线程，分别通过 `Runnable` 和 `Thread` 两种方式。
+
+**3. 线程同步与安全**
+- 同步代码块与方法
+- `synchronized` 关键字
+- 死锁问题
+
+**案例练习**：  
+模拟银行账户转账，使用同步方法确保数据一致性，分析可能出现的死锁情况。
+
+**4. 线程通信**
+- `wait()` 和 `notify()` 的使用
+- 锁机制与 `Condition`
+
+**案例练习**：  
+实现生产者-消费者问题，使用 `wait()` 和 `notify()` 进行线程通信。
+
+**5. 高级锁机制与并发工具**
+- `ReentrantLock` 和 `ReadWriteLock`
+- 原子变量 (`AtomicInteger`, `AtomicBoolean` 等)
+- 并发集合 (`ConcurrentHashMap`, `CopyOnWriteArrayList`)
+
+**案例练习**：  
+使用 `ReentrantLock` 实现计数器的线程安全，并展示并发集合的用途。
+
+**6. 线程池**
+- `ExecutorService`使用
+- 创建固定线程池和缓存线程池
+- `Callable` 和 `Future` 接口
+
+**案例练习**：  
+使用线程池与 `Callable` 计算一组任务的并发执行结果。
+
+---
+
+### 案例练习
+
+**案例 1：创建并启动线程**
+
+```java
+// 实现 Runnable 接口
+class MyRunnable implements Runnable {
+    public void run() {
+        System.out.println("Thread using Runnable is running");
+    }
+}
+
+// 继承 Thread 类
+class MyThread extends Thread {
+    public void run() {
+        System.out.println("Thread using Thread is running");
+    }
+}
+
+public class ThreadCreationExample {
+    public static void main(String[] args) {
+        Thread thread1 = new Thread(new MyRunnable());
+        Thread thread2 = new MyThread();
+
+        thread1.start();
+        thread2.start();
+    }
+}
+```
+
+**案例 2：线程同步**
+
+```java
+class BankAccount {
+    private int balance = 100;
+
+    public synchronized void withdraw(int amount, String name) {
+        if (balance >= amount) {
+            System.out.println(name + " is going to withdraw");
+            balance -= amount;
+            System.out.println(name + " completed the withdrawal, remaining balance: " + balance);
+        } else {
+            System.out.println(name + " cannot withdraw due to insufficient balance, remaining balance: " + balance);
+        }
+    }
+}
+
+public class SynchronizedExample {
+    public static void main(String[] args) {
+        final BankAccount account = new BankAccount();
+        Runnable task = () -> account.withdraw(60, Thread.currentThread().getName());
+
+        Thread t1 = new Thread(task, "Thread1");
+        Thread t2 = new Thread(task, "Thread2");
+
+        t1.start();
+        t2.start();
+    }
+}
+```
+
+**案例 3：生产者-消费者问题**
+
+```java
+import java.util.LinkedList;
+
+class PC {
+    LinkedList<Integer> list = new LinkedList<>();
+    int capacity = 2;
+
+    public void produce() throws InterruptedException {
+        int value = 0;
+        while (true) {
+            synchronized (this) {
+                while (list.size() == capacity)
+                    wait();
+
+                System.out.println("Producer produced-" + value);
+                list.add(value++);
+                notify();
+                Thread.sleep(1000);
+            }
+        }
+    }
+
+    public void consume() throws InterruptedException {
+        while (true) {
+            synchronized (this) {
+                while (list.size() == 0)
+                    wait();
+
+                int val = list.removeFirst();
+                System.out.println("Consumer consumed-" + val);
+                notify();
+                Thread.sleep(1000);
+            }
+        }
+    }
+}
+
+public class ProducerConsumerExample {
+    public static void main(String[] args) throws InterruptedException {
+        final PC pc = new PC();
+
+        Thread producerThread = new Thread(() -> {
+            try {
+                pc.produce();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        Thread consumerThread = new Thread(() -> {
+            try {
+                pc.consume();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        producerThread.start();
+        consumerThread.start();
+
+        producerThread.join();
+        consumerThread.join();
+    }
+}
+```
+
+**案例 4：使用线程池和 Callable**
+
+```java
+import java.util.concurrent.*;
+
+public class ThreadPoolExample {
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
+        ExecutorService executorService = Executors.newFixedThreadPool(3);
+
+        Callable<Integer> task = () -> {
+            TimeUnit.SECONDS.sleep(2);
+            return 123;
+        };
+
+        Future<Integer> future = executorService.submit(task);
+
+        System.out.println("Task result: " + future.get());
+
+        executorService.shutdown();
+    }
+}
+```
+
+Java 多线程是一个非常重要的主题，常常在面试中被问及。以下是一些常见的多线程面试题及简要解答：
+
+---
+
+### 1. 什么是一个线程？进程与线程的区别是什么？
+
+**回答**：
+
+- **线程**：是操作系统能够进行运算调度的最小单位。一个线程是在程序中独立运行的执行路径。
+- **进程与线程的区别**：
+    - 进程是资源分配的单位，拥有独立的内存空间；线程是调度和执行的单位，共享进程的内存空间。
+    - 一个进程可以有多个线程，线程间可以共享数据。
+
+### 2. 如何创建线程，有什么方式？
+
+**回答**：
+
+- 实现 `Runnable` 接口，并将实现类实例作为参数传递给 `Thread`。
+- 继承 `Thread` 类，并重写 `run()` 方法。
+- 使用 Java 8 的 `Executors`框架（如 `ExecutorService`）来管理线程工厂或线程池。
+
+### 3. `synchronized` 关键字是如何使用的？
+
+**回答**：
+
+- `synchronized` 方法：锁住整个方法，使得同一对象的线程访问时互斥。
+- `synchronized` 块：锁住特定代码块，给予更细粒度的控制。
+- 用于确保线程安全，防止线程间的操作导致共享数据的不一致。
+
+### 4. 什么是死锁？如何避免死锁？
+
+**回答**：
+
+- **死锁**：是两个或多个线程因竞争资源而产生的一种互相等待的现象，导致它们无法继续执行。
+- **避免死锁**：
+    - 避免嵌套锁，尽量减少持有锁的时间。
+    - 应用锁顺序，确保所有线程都以相同的顺序请求锁。
+    - 使用超时尝试获取锁，并重试。
+
+### 5. 什么是 volatile 关键字？如何使用？
+
+**回答**：
+
+- `volatile` 是一种变量修饰符，用于确保变量在多个线程中可见和被及时更新，防止线程使用缓存值。
+- 常用于某些状态或标志位的变化需要立即被其他线程观察到。
+
+### 6. `wait()` 和 `notify()` 方法有什么用？
+
+**回答**：
+
+- 用于线程间通信，通过对象监视器控制访问同步部分。
+- `wait()`：使当前线程等待，释放持有锁，直到其他线程调用 `notify()` 或 `notifyAll()`。
+- `notify()`：唤醒一个等待该对象锁的线程。
+
+### 7. 并发集合与普通集合之间有什么区别？
+
+**回答**：
+
+- **普通集合**：如 `ArrayList`, `HashMap`，对于并发访问是不安全的。
+- **并发集合**：如 `ConcurrentHashMap`, `CopyOnWriteArrayList`，专为并发场景设计，可以避免线程安全问题，提高性能。
+
+### 8. 什么是线程池？如何使用？
+
+**回答**：
+
+- 线程池管理一定数量的线程以响应任务请求，减少线程创建和销毁的开销，提高效率。
+- 使用 `ExecutorService` 来创建和管理线程池。通过 `submit()` 方法提交任务，通过 `shutdown()` 关闭线程池。
+
+### 9. 可以使用哪些工具调试和监控多线程程序？
+
+**回答**：
+
+- 使用 Java 自带的 `jstack` 查看线程堆栈。
+- 使用 `VisualVM` 或 `JMC` 等调试工具可以监控实时线程活动。
+
+### 10. 什么是原子变量？为什么需要它们？
+
+**回答**：
+
+- 原子变量（如 `AtomicInteger`, `AtomicBoolean`）提供无锁的线程安全操作。
+- 需要它们以便在不使用锁的情况下安全地更新共享变量，提高性能。
+
+---
+
