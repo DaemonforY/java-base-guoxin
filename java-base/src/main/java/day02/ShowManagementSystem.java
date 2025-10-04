@@ -6,7 +6,7 @@ import java.util.*;
  * 节目管理系统 - 演示List接口的使用
  * 包含ArrayList和LinkedList两种实现方式
  * ================================
- * 节目管理系统: 实现Hashset
+ * 节目管理系统: 实现Hashset， 关键词搜 Hashset
  * ===================================
  */
 public class ShowManagementSystem {
