@@ -5,6 +5,9 @@ import java.util.*;
 /**
  * 节目管理系统 - 演示List接口的使用
  * 包含ArrayList和LinkedList两种实现方式
+ * ================================
+ * 节目管理系统: 实现Hashset
+ * ===================================
  */
 public class ShowManagementSystem {
 
@@ -12,6 +15,8 @@ public class ShowManagementSystem {
     private List<String> showList;
     // 使用LinkedList存储节目
     private LinkedList<String> showLinkedList;
+
+    private HashSet<String> showHashSet;
 
     /**
      * 构造函数，用于初始化节目管理系统
@@ -22,6 +27,8 @@ public class ShowManagementSystem {
 
         // 初始化LinkedList
         this.showLinkedList = new LinkedList<>();
+
+        this.showHashSet = new HashSet<>();
     }
 
 
@@ -47,6 +54,20 @@ public class ShowManagementSystem {
         } else {
             System.out.println("节目名称不能为空！");
         }
+    }
+
+
+    /**
+     * 添加节目到Hashset
+     */
+
+    public void addShowToHashset(String showName) {
+        if (showName != null && !showName.trim().isEmpty()) {
+            showHashSet.add(showName);
+        } else {
+            System.out.printf("Argument %s is invalid", showName);
+        }
+
     }
 
     /**
@@ -86,6 +107,28 @@ public class ShowManagementSystem {
     }
 
     /**
+     * 删除节目（从Hashset）
+     */
+
+    public boolean removeShowFromHashSet(String showName) {
+        if (showName == null || showName.trim().isEmpty()) {
+            System.out.println("节目名称不能为空！");
+            return false;
+        }
+
+        boolean removed = showHashSet.remove(showName.trim());
+        if (removed) {
+            System.out.println("节目 '" + showName.trim() + "' 已从HahSet中删除");
+        } else {
+            System.out.println("节目 '" + showName.trim() + "' 不存在于LinkedList中");
+        }
+
+        return removed;
+
+
+    }
+
+    /**
      * 查找节目是否存在（在ArrayList中）
      */
     public boolean findShow(String showName) {
@@ -122,6 +165,28 @@ public class ShowManagementSystem {
     }
 
     /**
+     * 查找节目是否存在（在Hashset中）
+     */
+
+    public boolean findShowInHashSet(String showName) {
+        if (showName == null || showName.trim().isEmpty()) {
+            System.out.println("节目名称不能为空！");
+            return false;
+        }
+
+        boolean exists = showHashSet.contains(showName.trim());
+        if (exists) {
+            System.out.println("节目 '" + showName.trim() + "' 存在于LinkedList中");
+        } else {
+            System.out.println("节目 '" + showName.trim() + "' 不存在于LinkedList中");
+        }
+        return exists;
+
+    }
+
+    
+
+    /**
      * 展示节目列表（ArrayList）
      */
     public void displayShows() {
@@ -152,6 +217,24 @@ public class ShowManagementSystem {
         }
         System.out.println("总共有 " + showLinkedList.size() + " 个节目");
     }
+
+
+    /**
+     * 展示节目列表（Hashset）
+     */
+    public void displayHashSetShows() {
+        if (showHashSet.isEmpty()) {
+            System.out.println("LinkedList节目列表为空");
+            return;
+        }
+
+        System.out.println("\n=== 当前节目列表 (LinkedList) ===");
+        for (int i = 0; i < showHashSet.size(); i++) {
+            System.out.println((i + 1) + ". " + showLinkedList.get(i));
+        }
+        System.out.println("总共有 " + showLinkedList.size() + " 个节目");
+    }
+
 
     /**
      * 使用迭代器遍历ArrayList
@@ -185,6 +268,42 @@ public class ShowManagementSystem {
             System.out.println(index++ + ". " + show);
         }
     }
+
+
+    /**
+     * 使用增强for循环遍历Hashset
+     */
+    public void ForEachHashset() {
+        if (showHashSet.isEmpty()) {
+            System.out.println("Hashset节目列表为空，无法迭代");
+            return;
+        }
+
+        System.out.println("\n=== 使用增强for循环遍历LinkedList ===");
+        int index = 1;
+        for (String show : showLinkedList) {
+            System.out.println(index++ + ". " + show);
+        }
+    }
+
+    /**
+     * 使用迭代器遍历Hashset
+     */
+
+    public void IteratorWithHashset() {
+        if (showHashSet.isEmpty()) {
+            System.out.println("Hashset节目列表为空，无法迭代");
+            return;
+        }
+
+        Iterator<String> it = showHashSet.iterator();
+        while (it.hasNext()) {
+            System.out.println(it.next());
+            
+        }
+    }
+
+
 
     /**
      * 演示List与数组的区别
