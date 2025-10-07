@@ -11,6 +11,8 @@ import java.util.ArrayDeque;
 import java.util.LinkedList;
 import java.util.Queue;
 
+// todo : 一个生产者多个消费者时程序不结束
+
 public class ProducerConsumer {
     
     static class boundedBuffer<T> {
